@@ -37,7 +37,7 @@ export default async function handler(req, res) {
 
     // Get image file and scale
     const imageFile = Array.isArray(files.image) ? files.image[0] : files.image;
-    const scale = parseInt(Array.isArray(fields.scale) ? fields.scale[0] : fields.scale) || 4;
+    let scale = parseInt(Array.isArray(fields.scale) ? fields.scale[0] : fields.scale) || 4;
 
     if (!imageFile) {
       return res.status(400).json({ 
@@ -59,15 +59,39 @@ export default async function handler(req, res) {
     const metadata = await sharp(imageBuffer).metadata();
     console.log('Image metadata:', metadata);
 
+    // Smart scaling - auto adjust jika hasil bakal terlalu besar
+    const maxDimension = 8192;
+    const maxScaleByWidth = Math.floor(maxDimension / metadata.width);
+    const maxScaleByHeight = Math.floor(maxDimension / metadata.height);
+    const maxPossibleScale = Math.min(maxScaleByWidth, maxScaleByHeight);
+
+    // Jika requested scale terlalu besar, auto adjust
+    if (scale > maxPossibleScale) {
+      console.log(`Auto-adjusting scale from ${scale}x to ${maxPossibleScale}x (max possible)`);
+      scale = maxPossibleScale;
+    }
+
     // Calculate new dimensions
     const newWidth = metadata.width * scale;
     const newHeight = metadata.height * scale;
 
-    // Check max dimensions
-    if (newWidth > 4096 || newHeight > 4096) {
+    // Check max dimensions dan kasih saran
+    const maxDimension = 8192; // Support modern HD images
+    if (newWidth > maxDimension || newHeight > maxDimension) {
+      // Hitung scale maksimal yang bisa dipakai
+      const maxScaleByWidth = Math.floor(maxDimension / metadata.width);
+      const maxScaleByHeight = Math.floor(maxDimension / metadata.height);
+      const suggestedScale = Math.min(maxScaleByWidth, maxScaleByHeight);
+      
       return res.status(400).json({
         success: false,
-        message: `Hasil terlalu besar! Max 4096x4096px. Original: ${metadata.width}x${metadata.height}, Result: ${newWidth}x${newHeight}`
+        message: `Hasil upscale terlalu besar! Untuk gambar ${metadata.width}x${metadata.height}, maksimal bisa ${suggestedScale}x upscale.`,
+        details: {
+          original: `${metadata.width}x${metadata.height}`,
+          requested: `${newWidth}x${newHeight} (${scale}x)`,
+          suggestedScale: suggestedScale,
+          maxDimension: maxDimension
+        }
       });
     }
 
