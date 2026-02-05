@@ -1,6 +1,7 @@
 {
   "name": "image-upscaler-api",
   "version": "1.0.0",
+  "type": "module",
   "description": "Image Upscaler API with Sharp",
   "dependencies": {
     "sharp": "^0.33.2",
