@@ -47,6 +47,73 @@ export default async function handler(req, res) {
     }
 
     console.log(`Processing image with scale ${scale}x`);
+
+    // Read image buffer
+    const filePath = imageFile.filepath || imageFile.path;
+    const imageBuffer = await readFile(filePath);
+    console.log('Image buffer read, size:', imageBuffer.length);
+
+    // Get metadata
+    const metadata = await sharp(imageBuffer).metadata();
+    console.log('Image metadata:', metadata.width, 'x', metadata.height);
+
+    // Smart scaling - auto adjust jika hasil bakal terlalu besar
+    const maxDimension = 8192;
+    const maxScaleByWidth = Math.floor(maxDimension / metadata.width);
+    const maxScaleByHeight = Math.floor(maxDimension / metadata.height);
+    const maxPossibleScale = Math.min(maxScaleByWidth, maxScaleByHeight);
+
+    // Auto adjust scale jika terlalu besar
+    if (scale > maxPossibleScale) {
+      console.log(`Auto-adjusting scale from ${scale}x to ${maxPossibleScale}x`);
+      scale = maxPossibleScale;
+    }
+
+    // Calculate new dimensions
+    const newWidth = metadata.width * scale;
+    const newHeight = metadata.height * scale;
+
+    console.log(`Upscaling to ${newWidth}x${newHeight}`);
+
+    // Process image
+    const upscaled = await sharp(imageBuffer, {
+      limitInputPixels: false,
+    })
+      .resize(newWidth, newHeight, {
+        kernel: sharp.kernel.lanczos3,
+        fit: 'fill',
+      })
+      .sharpen()
+      .png({
+        quality: 100,
+        compressionLevel: 6,
+      })
+      .toBuffer();
+
+    console.log('Upscale complete, output size:', upscaled.length);
+
+    // Send response
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'no-cache');
+    return res.status(200).send(upscaled);
+
+  } catch (error) {
+    console.error('Upscale error:', error);
+    return res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Failed to process image',
+      error: error.toString()
+    });
+  }
+}
+    if (!imageFile) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'No image file uploaded' 
+      });
+    }
+
+    console.log(`Processing image with scale ${scale}x`);
     console.log('File path:', imageFile.filepath || imageFile.path);
 
     // Read image buffer
