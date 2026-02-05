@@ -1,16 +1,21 @@
-import formidable from 'formidable';
-import sharp from 'sharp';
-import { readFile } from 'fs/promises';
+const formidable = require('formidable');
+const sharp = require('sharp');
+const fs = require('fs').promises;
 
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
+module.exports = async (req, res) => {
+  // Set CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-export default async function handler(req, res) {
-  // Only allow POST
+  // Handle OPTIONS
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  // Only POST
   if (req.method !== 'POST') {
+    res.setHeader('Content-Type', 'application/json');
     return res.status(405).json({ 
       success: false, 
       message: 'Method not allowed' 
@@ -18,22 +23,93 @@ export default async function handler(req, res) {
   }
 
   try {
-    console.log('Starting upscale process...');
+    console.log('=== UPSCALE START ===');
 
-    // Parse form data
-    const form = formidable({
-      maxFileSize: 10 * 1024 * 1024, // 10MB
-      keepExtensions: true,
-    });
-
-    const [fields, files] = await new Promise((resolve, reject) => {
+    // Parse form
+    const form = formidable({ maxFileSize: 10 * 1024 * 1024 });
+    
+    const { fields, files } = await new Promise((resolve, reject) => {
       form.parse(req, (err, fields, files) => {
-        if (err) reject(err);
-        else resolve([fields, files]);
+        if (err) {
+          console.error('Form parse error:', err);
+          reject(err);
+        } else {
+          resolve({ fields, files });
+        }
       });
     });
 
-    console.log('Form parsed successfully');
+    console.log('Form parsed OK');
+
+    // Get files
+    const imageFile = Array.isArray(files.image) ? files.image[0] : files.image;
+    const scaleField = Array.isArray(fields.scale) ? fields.scale[0] : fields.scale;
+    let scale = parseInt(scaleField) || 2;
+
+    if (!imageFile) {
+      res.setHeader('Content-Type', 'application/json');
+      return res.status(400).json({ 
+        success: false, 
+        message: 'No image uploaded' 
+      });
+    }
+
+    console.log('Image file:', imageFile.originalFilename);
+    console.log('Scale:', scale);
+
+    // Read image
+    const filePath = imageFile.filepath || imageFile.path;
+    const buffer = await fs.readFile(filePath);
+    console.log('Buffer size:', buffer.length);
+
+    // Get metadata
+    const metadata = await sharp(buffer).metadata();
+    console.log(`Original: ${metadata.width}x${metadata.height}`);
+
+    // Auto-adjust scale
+    const maxDim = 6144;
+    const maxScale = Math.min(
+      Math.floor(maxDim / metadata.width),
+      Math.floor(maxDim / metadata.height)
+    );
+
+    if (scale > maxScale) {
+      scale = maxScale;
+      console.log(`Scale adjusted to ${scale}x`);
+    }
+
+    const newW = metadata.width * scale;
+    const newH = metadata.height * scale;
+    console.log(`Target: ${newW}x${newH}`);
+
+    // Process
+    const result = await sharp(buffer)
+      .resize(newW, newH, {
+        kernel: sharp.kernel.lanczos3,
+      })
+      .sharpen()
+      .png({ quality: 100 })
+      .toBuffer();
+
+    console.log('Output size:', result.length);
+    console.log('=== UPSCALE DONE ===');
+
+    // Send
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'no-cache');
+    return res.status(200).send(result);
+
+  } catch (error) {
+    console.error('=== ERROR ===');
+    console.error(error);
+    res.setHeader('Content-Type', 'application/json');
+    return res.status(500).json({ 
+      success: false, 
+      message: error.message,
+      stack: error.stack
+    });
+  }
+};
 
     // Get image file and scale
     const imageFile = Array.isArray(files.image) ? files.image[0] : files.image;
