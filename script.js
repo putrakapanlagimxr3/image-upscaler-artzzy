@@ -91,8 +91,17 @@ async function processImage() {
         });
         
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Gagal memproses gambar');
+            // Try to parse as JSON first
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                const error = await response.json();
+                throw new Error(error.message || 'Gagal memproses gambar');
+            } else {
+                // If not JSON, get text response
+                const errorText = await response.text();
+                console.error('Server error:', errorText);
+                throw new Error('Gagal memproses gambar. Coba lagi atau gunakan gambar lebih kecil.');
+            }
         }
         
         // Get image blob
