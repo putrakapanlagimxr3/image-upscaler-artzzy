@@ -1,0 +1,27 @@
+{
+  "name": "image-upscaler-api",
+  "version": "1.0.0",
+  "description": "Image Upscaler API with Sharp",
+  "main": "index.html",
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "echo 'No build step required'",
+    "start": "vercel dev"
+  },
+  "dependencies": {
+    "sharp": "^0.33.2",
+    "formidable": "^3.5.1"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=18.x"
+  },
+  "keywords": [
+    "image",
+    "upscale",
+    "sharp",
+    "vercel"
+  ],
+  "author": "",
+  "license": "MIT"
+}
